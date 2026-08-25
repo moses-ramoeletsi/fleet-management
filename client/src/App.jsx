@@ -12,6 +12,7 @@ import { Analytics } from '@vercel/analytics/react';
 
 export default function App() {
   return (
+    <>
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
@@ -24,7 +25,7 @@ export default function App() {
         <Route path="/settings" element={<Settings />} />
       </Route>
     </Routes>
-
     <Analytics />
+  </>
   )
 }
