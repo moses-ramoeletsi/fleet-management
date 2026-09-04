@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { Save, User, Bell, Shield, Palette, Sun, Moon, Monitor, Sparkles } from 'lucide-react'
+import { Save, User, Bell, Shield, Palette, Database, Trash2, Sun, Moon, Monitor, Sparkles } from 'lucide-react'
 import { useTheme, ACCENT_PRESETS } from '../context/ThemeContext'
+import { useFleet } from '../context/FleetContext'
+import { storage } from '../utils/storage'
 import AppearanceModal from '../components/AppearanceModal'
 
 export default function Settings() {
@@ -16,8 +18,9 @@ export default function Settings() {
   const [saved, setSaved] = useState(false)
   const [appearanceOpen, setAppearanceOpen] = useState(false)
 
-  const { theme, accent } = useTheme()
+  const { theme, setTheme, accent } = useTheme()
   const currentAccent = ACCENT_PRESETS.find(p => p.id === accent) || ACCENT_PRESETS[0]
+  const { vehicles, drivers, trips, maintenance, fuel, bookings, notifications, resetAllData } = useFleet()
 
   const save = () => {
     setSaved(true)
@@ -25,10 +28,11 @@ export default function Settings() {
   }
 
   const tabs = [
-    { id: 'profile',       label: 'Profile',       icon: User },
-    // { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'appearance',    label: 'Appearance',    icon: Palette },
-    // { id: 'security',      label: 'Security',      icon: Shield },
+    { id: 'profile',       label: 'Profile',          icon: User },
+    { id: 'notifications', label: 'Notifications',    icon: Bell },
+    { id: 'appearance',    label: 'Appearance',       icon: Palette },
+    { id: 'security',      label: 'Security',         icon: Shield },
+    { id: 'data',          label: 'Data Management',  icon: Database },
   ]
 
   return (
@@ -48,7 +52,7 @@ export default function Settings() {
                 <button
                   key={t.id}
                   onClick={() => setTab(t.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     tab === t.id
                       ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
@@ -67,7 +71,7 @@ export default function Settings() {
             <div className="space-y-4 max-w-2xl">
               <div className="flex items-center gap-4 pb-6 border-b border-slate-100 dark:border-slate-700">
                 <div className="w-20 h-20 rounded-full bg-gradient-to-br from-brand-500 to-purple-500 flex items-center justify-center text-white text-2xl font-semibold">
-                  NK
+                  {profile.name.split(' ').map(n => n[0]).join('')}
                 </div>
                 <div>
                   <button className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200">
@@ -181,7 +185,7 @@ export default function Settings() {
                     return (
                       <button
                         key={t.id}
-                        onClick={() => window.dispatchEvent(new CustomEvent('fleetpro:setTheme', { detail: t.id }))}
+                        onClick={() => setTheme(t.id)}
                         className={`p-4 rounded-xl border-2 text-left transition-all ${
                           selected
                             ? 'border-brand-600 bg-brand-50 dark:bg-slate-700'
@@ -217,12 +221,20 @@ export default function Settings() {
                             selected ? 'ring-2 ring-offset-2 ring-offset-white dark:ring-offset-slate-800 scale-110' : 'hover:scale-105'
                           }`}
                           style={{ background: p.hex, '--tw-ring-color': p.hex }}
+                          onClick={() => {
+                            // Trigger theme context update
+                            const evt = new CustomEvent('fleetpro:setAccent', { detail: p.id })
+                            window.dispatchEvent(evt)
+                          }}
                         />
                         <div className="mt-1 text-[10px] text-center text-slate-600 dark:text-slate-400">{p.name}</div>
                       </button>
                     )
                   })}
                 </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
+                  💡 Click any color to apply instantly. For full customization, open the customizer below.
+                </p>
               </div>
 
               {/* Open Full Customizer Button */}
@@ -257,6 +269,114 @@ export default function Settings() {
                   Enable 2FA
                 </button>
               </div>
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
+                <h4 className="font-medium text-slate-800 dark:text-slate-100 mb-2">Active Sessions</h4>
+                <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800 dark:text-slate-100">Current Session</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Last active: Just now</p>
+                  </div>
+                  <span className="text-xs px-2 py-1 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-medium">Active</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ============ DATA MANAGEMENT ============ */}
+          {tab === 'data' && (
+            <div className="max-w-2xl space-y-6">
+              {/* Storage Info */}
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+                <h3 className="font-semibold text-slate-800 dark:text-slate-100 mb-3 flex items-center gap-2">
+                  <Database size={18} className="text-brand-600" />
+                  Local Storage Status
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <StorageStat label="Vehicles" count={vehicles.length} />
+                  <StorageStat label="Drivers" count={drivers.length} />
+                  <StorageStat label="Trips" count={trips.length} />
+                  <StorageStat label="Bookings" count={bookings.length} />
+                  <StorageStat label="Maintenance" count={maintenance.length} />
+                  <StorageStat label="Fuel Logs" count={fuel.length} />
+                  <StorageStat label="Notifications" count={notifications.length} />
+                  <StorageStat label="Storage Used" count={`${storage.getUsage().kb} KB`} />
+                </div>
+              </div>
+
+              {/* Data Expiry Info */}
+              <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>ℹ️ Data Retention:</strong> All data is stored locally in your browser and will be automatically cleared after <strong>2 days</strong> of inactivity. This is a demo environment — for production use, data would be stored on secure cloud servers with permanent retention.
+                </p>
+              </div>
+
+              {/* Export/Import Section */}
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+                <h3 className="font-semibold text-slate-800 dark:text-slate-100 mb-3">Backup & Restore</h3>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => {
+                      const data = {
+                        vehicles, drivers, trips, maintenance, fuel, bookings,
+                        exportDate: new Date().toISOString()
+                      }
+                      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `fleetpro-backup-${new Date().toISOString().split('T')[0]}.json`
+                      a.click()
+                      URL.revokeObjectURL(url)
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium"
+                  >
+                    <Save size={16} /> Export Data
+                  </button>
+                  <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm font-medium text-slate-700 dark:text-slate-200 cursor-pointer">
+                    <Database size={16} /> Import Data
+                    <input
+                      type="file"
+                      accept=".json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files[0]
+                        if (!file) return
+                        const reader = new FileReader()
+                        reader.onload = (ev) => {
+                          try {
+                            const data = JSON.parse(ev.target.result)
+                            alert('Import functionality would restore data here. (Demo mode)')
+                          } catch {
+                            alert('Invalid backup file.')
+                          }
+                        }
+                        reader.readAsText(file)
+                      }}
+                    />
+                  </label>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                  Export your data as a JSON file for backup. Import to restore a previous backup.
+                </p>
+              </div>
+
+              {/* Reset Button */}
+              <div className="rounded-xl border border-red-200 dark:border-red-800 p-5 bg-red-50 dark:bg-red-900/10">
+                <h3 className="font-semibold text-red-800 dark:text-red-200 mb-2 flex items-center gap-2">
+                  <Trash2 size={18} />
+                  Danger Zone
+                </h3>
+                <p className="text-sm text-red-700 dark:text-red-300 mb-4">
+                  This will permanently delete all your vehicles, drivers, trips, bookings, fuel logs, and maintenance records. This action cannot be undone.
+                </p>
+                <button
+                  onClick={resetAllData}
+                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium inline-flex items-center gap-2"
+                >
+                  <Trash2 size={16} />
+                  Reset All Data
+                </button>
+              </div>
             </div>
           )}
 
@@ -284,9 +404,11 @@ export default function Settings() {
 }
 
 function Grid({ children }) { return <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{children}</div> }
+
 function Field({ label, children, full }) {
   return <div className={full ? 'sm:col-span-2' : ''}><label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">{label}</label>{children}</div>
 }
+
 function Toggle({ label, desc, value, onChange }) {
   return (
     <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
@@ -297,6 +419,15 @@ function Toggle({ label, desc, value, onChange }) {
       <button onClick={() => onChange(!value)} className={`relative w-11 h-6 rounded-full ${value ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
         <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
       </button>
+    </div>
+  )
+}
+
+function StorageStat({ label, count }) {
+  return (
+    <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50 text-center">
+      <p className="text-xl font-bold text-slate-800 dark:text-slate-100">{count}</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
     </div>
   )
 }
